@@ -77,9 +77,26 @@ the full LangGraph agent as a single MCP tool with memory.
 |---------|---------|
 | **Groq** | Fast LLM inference (Llama 3.1) |
 | **Tavily** | Web search tool |
-| **LangSmith** | Tracing & observability |
+| **LangSmith** | Tracing, debugging, token monitoring, cost tracking |
 | **FastMCP** | MCP server framework |
 | **langchain-mcp-adapters** | Consume MCP servers from LangGraph |
+
+## Monitoring & Observability (LangSmith)
+
+All LLM calls are automatically traced via LangSmith:
+
+- **Project**: `Ashok-Debug-Monitor-Langraph-1`
+- **What's tracked**: Full execution traces, token usage, latency, tool calls, errors
+- **Debugging**: Click any trace to see exact prompt → response at every graph node
+- **Cost visibility**: Input/output tokens per call for spend estimation
+
+Configured via `.env`:
+```
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=Ashok-Debug-Monitor-Langraph-1
+```
 
 ## Setup
 
@@ -96,10 +113,15 @@ Create a `.env` file in the project root:
 ```
 GROQ_API_KEY=your_groq_api_key
 TAVILY_API_KEY=your_tavily_api_key
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=Ashok-Debug-Monitor-Langraph-1
 ```
 
 - **Groq**: https://console.groq.com/keys
 - **Tavily**: https://tavily.com
+- **LangSmith**: https://smith.langchain.com
 
 ### 3. Run the MCP multi-server client (recommended)
 
