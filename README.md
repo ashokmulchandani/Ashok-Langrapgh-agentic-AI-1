@@ -90,6 +90,19 @@ All LLM calls are automatically traced via LangSmith:
 - **Debugging**: Click any trace to see exact prompt → response at every graph node
 - **Cost visibility**: Input/output tokens per call for spend estimation
 
+### LangGraph Studio (Visual Debugging)
+
+```bash
+langgraph dev
+```
+
+- Opens at: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024`
+- **Live visual graph** — watch nodes light up as agent executes
+- **Step-by-step inspection** — see input/output at each node
+- **Interactive testing** — type queries and watch the ReAct loop
+- **Note**: Studio is a live dev tool — only works while `langgraph dev` is running
+- **Traces persist** in LangSmith even after Studio is stopped
+
 Configured via `.env`:
 ```
 LANGSMITH_TRACING=true
