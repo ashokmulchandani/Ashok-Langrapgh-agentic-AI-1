@@ -1,11 +1,9 @@
 """
 MCP Client — LangGraph Agent that connects to multiple MCP servers.
 
-This client discovers tools from separate MCP servers (math, search, groq)
-and builds a LangGraph StateGraph agent that can use all of them.
-
 Usage:
     python mcp/client/mcp_client.py
+    python mcp/client/mcp_client.py "What is 5 times 4?"
 """
 
 import asyncio
@@ -15,7 +13,6 @@ from typing import Annotated
 from typing_extensions import TypedDict
 from dotenv import load_dotenv
 
-# Add project root to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 load_dotenv()
 
@@ -23,7 +20,6 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.memory import MemorySaver
 from langchain_groq import ChatGroq
 
 
@@ -37,19 +33,21 @@ class State(TypedDict):
 # ============================================
 # 2. MCP Server configurations
 # ============================================
-# Get the path to the servers directory
 SERVERS_DIR = os.path.join(os.path.dirname(__file__), "..", "servers")
 
 MCP_SERVERS = {
     "math": {
+        "transport": "stdio",
         "command": "python",
         "args": [os.path.join(SERVERS_DIR, "math_server.py")],
     },
     "search": {
+        "transport": "stdio",
         "command": "python",
         "args": [os.path.join(SERVERS_DIR, "search_server.py")],
     },
     "groq": {
+        "transport": "stdio",
         "command": "python",
         "args": [os.path.join(SERVERS_DIR, "groq_server.py")],
     },
@@ -57,85 +55,77 @@ MCP_SERVERS = {
 
 
 # ============================================
-# 3. Build and run the agent
+# 3. Main async function
 # ============================================
-async def run_agent(query: str, thread_id: str = "1"):
-    """Connect to MCP servers, build LangGraph agent, and run a query."""
+async def main():
+    """Start MCP client, discover tools, build agent, and chat."""
 
-    async with MultiServerMCPClient(MCP_SERVERS) as client:
-        # Get all tools from all MCP servers
-        tools = client.get_tools()
+    print("=" * 50)
+    print("🚀 Starting MCP servers...")
+    print("=" * 50)
 
-        print(f"\n🔧 Discovered {len(tools)} tools from MCP servers:")
-        for tool in tools:
-            print(f"   - {tool.name}: {tool.description[:60]}...")
+    # Create client and keep it alive for the entire session
+    client = MultiServerMCPClient(MCP_SERVERS)
+    tools = await client.get_tools()
 
-        # Build LangGraph agent with discovered tools
-        llm = ChatGroq(model="llama-3.1-8b-instant")
-        llm_with_tools = llm.bind_tools(tools)
+    print(f"\n🔧 Discovered {len(tools)} tools from MCP servers:")
+    for tool in tools:
+        print(f"   - {tool.name}: {tool.description[:60]}...")
 
-        def chatbot_node(state: State):
-            return {"messages": [llm_with_tools.invoke(state["messages"])]}
+    # Build LangGraph agent
+    llm = ChatGroq(model="llama-3.1-8b-instant")
+    llm_with_tools = llm.bind_tools(tools)
 
-        # Build graph
-        builder = StateGraph(State)
-        builder.add_node("chatbot", chatbot_node)
-        builder.add_node("tools", ToolNode(tools))
-        builder.add_edge(START, "chatbot")
-        builder.add_conditional_edges("chatbot", tools_condition)
-        builder.add_edge("tools", "chatbot")
+    async def chatbot_node(state: State):
+        return {"messages": [await llm_with_tools.ainvoke(state["messages"])]}
 
-        # Compile with memory
-        memory = MemorySaver()
-        graph = builder.compile(checkpointer=memory)
+    builder = StateGraph(State)
+    builder.add_node("chatbot", chatbot_node)
+    builder.add_node("tools", ToolNode(tools))
+    builder.add_edge(START, "chatbot")
+    builder.add_conditional_edges("chatbot", tools_condition)
+    builder.add_edge("tools", "chatbot")
+    graph = builder.compile()
 
-        # Run the query
-        config = {"configurable": {"thread_id": thread_id}}
+    # Single query mode
+    if len(sys.argv) > 1:
+        query = " ".join(sys.argv[1:])
         print(f"\n💬 Query: {query}")
         print("-" * 50)
-
-        response = graph.invoke({"messages": query}, config=config)
-
-        # Print the response
+        response = await graph.ainvoke({"messages": query})
         print(f"\n🤖 Response: {response['messages'][-1].content}")
-        print("=" * 50)
+        return
 
-        return response["messages"][-1].content
-
-
-# ============================================
-# 4. Interactive chat loop
-# ============================================
-async def interactive_chat():
-    """Run an interactive chat session with the MCP-powered agent."""
-
+    # Interactive mode
+    print("\n" + "=" * 50)
+    print("💬 Interactive Chat (type 'quit' to exit)")
     print("=" * 50)
-    print("🚀 MCP Client — LangGraph Agent")
-    print("   Connected to: Math, Search, Groq servers")
-    print("   Type 'quit' to exit")
-    print("=" * 50)
-
-    thread_id = "interactive-1"
 
     while True:
-        query = input("\n📝 You: ").strip()
+        try:
+            query = input("\n📝 You: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n👋 Goodbye!")
+            break
+
         if query.lower() in ["quit", "exit", "q"]:
             print("👋 Goodbye!")
             break
         if not query:
             continue
 
-        await run_agent(query, thread_id=thread_id)
+        print("-" * 50)
+        try:
+            response = await graph.ainvoke({"messages": query})
+            print(f"\n🤖 Response: {response['messages'][-1].content}")
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+
+        print("=" * 50)
 
 
 # ============================================
-# 5. Main
+# 4. Entry point
 # ============================================
 if __name__ == "__main__":
-    # Single query mode
-    if len(sys.argv) > 1:
-        query = " ".join(sys.argv[1:])
-        asyncio.run(run_agent(query))
-    else:
-        # Interactive mode
-        asyncio.run(interactive_chat())
+    asyncio.run(main())

@@ -5,33 +5,27 @@ An agentic AI crash course built with LangGraph, LangChain, Groq (Llama 3.1), an
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    MCP Server                            │
-│                 (mcp_server.py)                          │
-│                                                         │
-│   ┌───────────────────────────────────────────────┐     │
-│   │           LangGraph StateGraph                │     │
-│   │                                               │     │
-│   │   START → [Chatbot Node] → END               │     │
-│   │               │                               │     │
-│   │               ▼ (if tool call)                │     │
-│   │          [Tool Node]                          │     │
-│   │           - Tavily Search                     │     │
-│   │           - Multiply                          │     │
-│   │               │                               │     │
-│   │               ▼ (loop back)                   │     │
-│   │          [Chatbot Node]                       │     │
-│   │                                               │     │
-│   │   + MemorySaver (conversation persistence)    │     │
-│   └───────────────────────────────────────────────┘     │
-│                                                         │
-│   Exposed MCP Tools:                                    │
-│   • agent_chat (with memory)                            │
-│   • agent_chat_no_memory (stateless)                    │
-│   • get_graph_diagram                                   │
-│                                                         │
-│   Transport: stdio (default) | HTTP/SSE (optional)      │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    MCP Client                                │
+│            (mcp/client/mcp_client.py)                        │
+│                                                             │
+│   LangGraph Agent (Llama 3.1 via Groq)                      │
+│   • Auto-discovers tools from all MCP servers               │
+│   • Decides which tool to call (ReAct pattern)              │
+│                                                             │
+│   Connects to (via stdio transport):                        │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│   │ Math Server  │  │ Search Server│  │ Groq Server  │     │
+│   │              │  │              │  │              │     │
+│   │ • multiply   │  │ • search_web │  │ • chat       │     │
+│   │ • add        │  │ • search_news│  │ • summarize  │     │
+│   │ • divide     │  │              │  │ • translate   │     │
+│   │ • power      │  │              │  │              │     │
+│   └──────────────┘  └──────────────┘  └──────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+
+Also includes a standalone MCP server (mcp_server.py) that exposes
+the full LangGraph agent as a single MCP tool with memory.
 ```
 
 ## Project Structure
@@ -50,7 +44,15 @@ An agentic AI crash course built with LangGraph, LangChain, Groq (Llama 3.1), an
 │   └── multimodal_sample.pdf
 ├── Agents/
 │   └── multiaiagent.ipynb     # Multi-agent supervisor pattern
-├── mcp_server.py              # MCP server with LangGraph agent
+├── mcp/
+│   ├── servers/
+│   │   ├── math_server.py     # Math tools (multiply, add, divide, power)
+│   │   ├── search_server.py   # Web search (Tavily)
+│   │   └── groq_server.py     # LLM tools (chat, summarize, translate)
+│   ├── client/
+│   │   └── mcp_client.py      # LangGraph agent connecting to all servers
+│   └── README.md              # MCP architecture docs
+├── mcp_server.py              # Standalone MCP server with full LangGraph agent
 ├── requirements.txt
 ├── .env                       # API keys (gitignored)
 └── .gitignore
@@ -58,14 +60,16 @@ An agentic AI crash course built with LangGraph, LangChain, Groq (Llama 3.1), an
 
 ## Key Concepts Covered
 
-| Notebook | Concept |
-|----------|---------|
+| Notebook/File | Concept |
+|---------------|---------|
 | 1-BasicChatbot | StateGraph, Nodes, Edges, Tools, Memory, Streaming |
 | 2-HumanAssistance | Human-in-the-loop approval patterns |
 | 3-Debugging | LangGraph debugging & observability |
 | 4-Multimodal | Multimodal RAG with CLIP + GPT-4 |
 | Agents | Multi-agent supervisor architecture |
-| mcp_server.py | MCP server exposing LangGraph agent |
+| mcp_server.py | Standalone MCP server exposing LangGraph agent |
+| mcp/servers/ | Individual MCP tool servers (math, search, groq) |
+| mcp/client/ | LangGraph agent consuming multiple MCP servers |
 
 ## Services & APIs
 
@@ -97,7 +101,15 @@ TAVILY_API_KEY=your_tavily_api_key
 - **Groq**: https://console.groq.com/keys
 - **Tavily**: https://tavily.com
 
-### 3. Run the MCP server
+### 3. Run the MCP multi-server client (recommended)
+
+```bash
+python mcp/client/mcp_client.py
+```
+
+This launches all 3 MCP servers and starts an interactive chat.
+
+### 4. Or run the standalone MCP server
 
 ```bash
 # stdio mode (for Claude Desktop, Cursor, VS Code)
@@ -107,7 +119,7 @@ python mcp_server.py
 # Runs on http://localhost:8000
 ```
 
-### 4. Connect to Claude Desktop (optional)
+### 5. Connect to Claude Desktop (optional)
 
 Add to `%APPDATA%\Claude\claude_desktop_config.json`:
 
@@ -122,6 +134,32 @@ Add to `%APPDATA%\Claude\claude_desktop_config.json`:
 }
 ```
 
+## Example Session (MCP Client)
+
+```
+==================================================
+🚀 Starting MCP servers...
+==================================================
+
+🔧 Discovered 9 tools from MCP servers:
+   - multiply, add, divide, power
+   - search_web, search_news
+   - chat, summarize, translate
+
+==================================================
+💬 Interactive Chat (type 'quit' to exit)
+==================================================
+
+📝 You: what is 5 times 4
+🤖 Response: The result of 5 times 4 is 20.
+
+📝 You: search for latest AI news
+🤖 Response: The latest AI news includes...
+
+📝 You: translate hello world to Spanish
+🤖 Response: Hola mundo
+```
+
 ## How LangGraph Works Here
 
 ```python
@@ -129,8 +167,9 @@ Add to `%APPDATA%\Claude\claude_desktop_config.json`:
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 
-# 2. Define tools
-tools = [TavilySearch(), multiply]
+# 2. Discover tools from MCP servers
+client = MultiServerMCPClient(MCP_SERVERS)
+tools = await client.get_tools()
 
 # 3. Build graph
 builder = StateGraph(State)
@@ -139,9 +178,10 @@ builder.add_node("tools", ToolNode(tools))
 builder.add_edge(START, "chatbot")
 builder.add_conditional_edges("chatbot", tools_condition)
 builder.add_edge("tools", "chatbot")
+graph = builder.compile()
 
-# 4. Compile with memory
-graph = builder.compile(checkpointer=MemorySaver())
+# 4. Agent decides which tool to use
+response = await graph.ainvoke({"messages": "what is 5 times 4?"})
 ```
 
 The agent **decides on its own** whether to use tools or respond directly — that's the ReAct pattern powered by LangGraph's conditional edges.
