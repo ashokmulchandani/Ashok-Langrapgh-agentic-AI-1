@@ -2,5 +2,7 @@ langgraph
 langchain
 langsmith
 python-dotenv
-langchain-groq 
+langchain-groq
 langchain_tavily
+fastmcp
+langchain-mcp-adapters
