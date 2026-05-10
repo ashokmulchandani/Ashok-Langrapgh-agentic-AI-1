@@ -3,6 +3,9 @@
 .env.*
 **/.env
 
+# LangGraph Studio cache
+.langgraph_api/
+
 # Python
 __pycache__/
 *.py[cod]
