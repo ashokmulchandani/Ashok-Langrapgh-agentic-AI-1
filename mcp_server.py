@@ -107,4 +107,8 @@ def get_graph_diagram() -> str:
 
 
 if __name__ == "__main__":
+    # Option 1: stdio transport (default) — for local clients (Claude Desktop, Cursor, VS Code)
     mcp.run()
+
+    # Option 2: HTTP/SSE transport — for remote/shared access (uncomment below, comment above)
+    # mcp.run(transport="sse", host="0.0.0.0", port=8000)
